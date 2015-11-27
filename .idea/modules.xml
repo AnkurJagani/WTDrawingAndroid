@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/WTDrawingAndroid.iml" filepath="$PROJECT_DIR$/WTDrawingAndroid.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/wtdrawing/wtdrawing.iml" filepath="$PROJECT_DIR$/wtdrawing/wtdrawing.iml" />
+    </modules>
+  </component>
+</project>
