@@ -79,7 +79,6 @@
        android:id="@+id/wtDrawingView"
        android:layout_width="match_parent"
        android:layout_height="match_parent"
-        android:layout_below="@+id/tool"
-        android:onClick="changeColor" />
+        android:layout_below="@+id/tool"/>
 
 </RelativeLayout>

@@ -89,12 +89,8 @@ public class WTDrawingView extends View {
     }
 
     public WTDrawingView(Context c, int width, int height) {
-        this(c, null);
+        this(c,null);
         init(width, height);
-    }
-
-    public WTDrawingView(Context c) {
-        this(c, null);
     }
 
     public WTDrawingView(Context c, AttributeSet attrs) {
