@@ -8,12 +8,16 @@ import android.graphics.Paint;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 
 /**
  * WTDrawing
@@ -35,19 +39,21 @@ public class WTDrawingView extends View {
 
     private boolean initialized;
 
-    private Paint mPaint = new Paint(Paint.DITHER_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+    private Paint drawPaint = new Paint(Paint.DITHER_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
     private Paint eraserPaint = new Paint(Paint.DITHER_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-    private Paint mBitmapPaint;
-    private Canvas mCanvas;
-    private Bitmap mBitmap;
+    private Canvas drawCanvas;
+    private Bitmap drawBitmap;
+    private Bitmap undoBitmap;
 
-    private WTBezierPath  mPath;
-    private LinkedList<WTBezierPath> mPathArray;
+    private RectF dirtyRect;
+
+    private WTBezierPath drawPath;
+    private LinkedList<WTBezierPath> pathArray;
 
     private int drawingMode;
-    private PointF[] mPoints = new PointF[5];
-    private int mPointIndex;
-    private int mMovedPointCount;
+    private PointF[] points = new PointF[5];
+    private int pointIndex;
+    private int movedPointCount;
 
     private int strokeColor;
 
@@ -67,7 +73,7 @@ public class WTDrawingView extends View {
 
     public void setStrokeColor(int strokeColor) {
         this.strokeColor = strokeColor;
-        mPaint.setColor(this.strokeColor);
+        drawPaint.setColor(this.strokeColor);
     }
 
     public float getStrokeWidth() {
@@ -76,7 +82,7 @@ public class WTDrawingView extends View {
 
     public void setStrokeWidth(float strokeWidth) {
         this.strokeWidth = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, strokeWidth, getResources().getDisplayMetrics());
-        mPaint.setStrokeWidth(this.strokeWidth);
+        drawPaint.setStrokeWidth(this.strokeWidth);
     }
 
     public float getEraserWidth() {
@@ -88,8 +94,12 @@ public class WTDrawingView extends View {
         eraserPaint.setStrokeWidth(this.eraserWidth);
     }
 
+    public void setEraserMode(boolean drawEraser) {
+        drawingMode = drawEraser ? ERASER : DRAW;
+    }
+
     public WTDrawingView(Context c, int width, int height) {
-        this(c,null);
+        this(c, null);
         init(width, height);
     }
 
@@ -98,46 +108,75 @@ public class WTDrawingView extends View {
         context = c;
     }
 
-    public void setEraserMode(boolean drawEraser) {
-        drawingMode = drawEraser ? ERASER : DRAW;
+    /**
+     * Returns the bitmap of the drawing with the specified background color
+     *
+     * @param backgroundColor The background color for the bitmap
+     * @return The bitmap
+     */
+    public Bitmap getBitmap(int backgroundColor) {
+        if (drawBitmap != null && !drawBitmap.isRecycled()) {
+            // create new bitmap
+            Bitmap bitmap = Bitmap.createBitmap(drawBitmap.getWidth(), drawBitmap.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas bitmapCanvas = new Canvas(bitmap);
+
+            // draw background if not transparent
+            if (backgroundColor != 0) {
+                bitmapCanvas.drawColor(backgroundColor);
+            }
+
+            // draw bitmap
+            bitmapCanvas.drawBitmap(drawBitmap, 0, 0, null);
+
+            return bitmap;
+        }
+
+        return null;
     }
 
+    /**
+     * Undo last drawing.
+     */
     public void undo() {
         Paint emptyPaint = new Paint();
         emptyPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-        mCanvas.drawPaint(emptyPaint);
+        drawCanvas.drawPaint(emptyPaint);
 
-        if (!mPathArray.isEmpty()) {
-            mPathArray.removeLast();
+        if (!pathArray.isEmpty()) {
+            pathArray.removeLast();
         }
 
-        for (WTBezierPath path : mPathArray) {
-            mPaint.setStyle(path.isCircle ? Paint.Style.FILL : Paint.Style.STROKE);
+        for (WTBezierPath path : pathArray) {
+            drawPaint.setStyle(path.isCircle ? Paint.Style.FILL : Paint.Style.STROKE);
             if (path.isEraser) {
-                mCanvas.drawPath(path,eraserPaint);
+                drawCanvas.drawPath(path, eraserPaint);
             }
             else {
-                mPaint.setColor(path.strokeColor);
-                mPaint.setStrokeWidth(path.strokeWidth);
-                mCanvas.drawPath(path,mPaint);
+                drawPaint.setColor(path.strokeColor);
+                drawPaint.setStrokeWidth(path.strokeWidth);
+                drawCanvas.drawPath(path, drawPaint);
             }
         }
 
         // Restore paint
-        mPaint.setStrokeWidth(this.strokeWidth);
-        mPaint.setColor(this.strokeColor);
+        drawPaint.setStrokeWidth(this.strokeWidth);
+        drawPaint.setColor(this.strokeColor);
+        eraserPaint.setStrokeWidth(this.eraserWidth);
 
         invalidate();
     }
 
+    /**
+     * Clear all drawings.
+     */
     public void clear() {
         Paint emptyPaint = new Paint();
         emptyPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-        mCanvas.drawPaint(emptyPaint);
+        drawCanvas.drawPaint(emptyPaint);
 
-        mPathArray.clear();
-        if (mPath != null) {
-            mPath.reset();
+        pathArray.clear();
+        if (drawPath != null) {
+            drawPath.reset();
         }
 
         invalidate();
@@ -167,7 +206,7 @@ public class WTDrawingView extends View {
         super.onDraw(canvas);
 
         if (initialized) {
-            canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
+            canvas.drawBitmap(drawBitmap, 0, 0, null);
         }
         else {
             init(this.getWidth(),this.getHeight());
@@ -176,34 +215,35 @@ public class WTDrawingView extends View {
 
     private void init(int width, int height) {
         if (!initialized) {
-            mBitmapPaint = new Paint(Paint.DITHER_FLAG);
-            mPathArray = new LinkedList<WTBezierPath>();
+            pathArray = new LinkedList<WTBezierPath>();
 
             drawingMode = DRAW;
 
-            mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_4444);
-            mCanvas = new Canvas(mBitmap);
+            drawBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            drawCanvas = new Canvas(drawBitmap);
 
             setStrokeWidth(DEFAULT_STROKE_WIDTH);
             setStrokeColor(DEFAULT_STROKE_COLOR);
             setEraserWidth(DEFAULT_ERASER_WIDTH);
 
-            mPaint.setAntiAlias(true);
-            mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setStrokeCap(Paint.Cap.ROUND);
-            mPaint.setStrokeJoin(Paint.Join.ROUND);
+            drawPaint.setAntiAlias(true);
+            drawPaint.setStyle(Paint.Style.STROKE);
+            drawPaint.setStrokeCap(Paint.Cap.ROUND);
+            drawPaint.setStrokeJoin(Paint.Join.ROUND);
 
             eraserPaint.setAntiAlias(true);
             eraserPaint.setStyle(Paint.Style.STROKE);
             eraserPaint.setStrokeCap(Paint.Cap.ROUND);
             eraserPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
 
+            dirtyRect = new RectF();
+
             initialized = true;
         }
     }
 
     private Paint currentPaint() {
-        return drawingMode == ERASER ? eraserPaint : mPaint;
+        return drawingMode == ERASER ? eraserPaint : drawPaint;
     }
 
     private void touchesBegan(PointF p) {
@@ -212,67 +252,79 @@ public class WTDrawingView extends View {
             drawingMode = DRAW;
         }
 
-        mMovedPointCount = 0;
-        mPointIndex = 0;
-        mPoints[0] = p;
+        movedPointCount = 0;
+        pointIndex = 0;
+        points[0] = p;
 
-        mPaint.setStyle(Paint.Style.STROKE);
+        drawPaint.setStyle(Paint.Style.STROKE);
+        eraserPaint.setStyle(Paint.Style.STROKE);
 
-        mPath = new WTBezierPath();
-        mPath.strokeColor = this.strokeColor;
-        mPath.strokeWidth = this.strokeWidth;
-        mPath.isEraser = drawingMode == ERASER;
+        drawPath = new WTBezierPath();
+        drawPath.strokeColor = this.strokeColor;
+        drawPath.strokeWidth = this.strokeWidth;
+        drawPath.isEraser = drawingMode == ERASER;
     }
 
     private void touchesMoved(PointF p) {
 
-        mMovedPointCount ++;
-        mPointIndex ++;
-        mPoints[mPointIndex] = p;
+        movedPointCount++;
+        pointIndex++;
+        points[pointIndex] = p;
 
-        // We got 5 points here, now we can draw a bezier path,
+        // We got 5 points here, now we can draw a bezier drawPath,
         // use 4 points to draw a bezier,and the last point is cached for next segment.
-        if (mPointIndex == 4) {
-            mPoints[3] = new PointF((mPoints[2].x + mPoints[4].x) / 2, (mPoints[2].y + mPoints[4].y) / 2);
+        if (pointIndex == 4) {
+            points[3] = new PointF((points[2].x + points[4].x) / 2, (points[2].y + points[4].y) / 2);
 
-            moveToPoint(mPoints[0]);
-            addCurveToPoint(mPoints[3], mPoints[1], mPoints[2]);
+            moveToPoint(points[0]);
+            addCurveToPoint(points[3], points[1], points[2]);
 
-            mCanvas.drawPath(mPath, currentPaint());
+            drawCanvas.drawPath(drawPath, currentPaint());
 
-            invalidate();
+            // Calc dirty rect
+            float pathWidth = currentPaint().getStrokeWidth();
+            drawPath.computeBounds(dirtyRect, true);
+            dirtyRect.left = dirtyRect.left - pathWidth;
+            dirtyRect.top = dirtyRect.top - pathWidth;
+            dirtyRect.right = dirtyRect.right + pathWidth;
+            dirtyRect.bottom = dirtyRect.bottom + pathWidth;
 
-            mPoints[0] = mPoints[3];
-            mPoints[1] = mPoints[3]; // this is the "magic"
-            mPoints[2] = mPoints[4];
-            mPointIndex = 2;
+            Rect invalidRect = new Rect();
+            dirtyRect.round(invalidRect);
+            invalidate(invalidRect);
+
+            points[0] = points[3];
+            points[1] = points[3]; // this is the "magic"
+            points[2] = points[4];
+            pointIndex = 2;
         }
     }
 
     private void touchesEnded(PointF p) {
 
-        // Handle if there are no engough points to draw a bezier,
+        // Handle if there are no enough points to draw a bezier,
         // draw a circle instead.
-        if (mMovedPointCount < 3) {
-            mPath.reset();
-            mPath.isCircle = true;
-            mPath.addCircle(mPoints[0].x, mPoints[0].y, mPaint.getStrokeWidth(), WTBezierPath.Direction.CW);
-            mPaint.setStyle(Paint.Style.FILL);
-            mCanvas.drawPath(mPath, currentPaint());
+        if (movedPointCount < 3) {
+            Paint paint = currentPaint();
+            drawPath.reset();
+            drawPath.isCircle = true;
+            drawPath.addCircle(points[0].x, points[0].y, paint.getStrokeWidth(), WTBezierPath.Direction.CW);
+            paint.setStyle(Paint.Style.FILL);
+            drawCanvas.drawPath(drawPath, paint);
         }
 
-        mMovedPointCount = 0;
-        mPointIndex = 0;
+        movedPointCount = 0;
+        pointIndex = 0;
 
-        mPathArray.add(mPath);
+        pathArray.add(drawPath);
         invalidate();
     }
 
     private void moveToPoint(PointF p) {
-        mPath.moveTo(p.x, p.y);
+        drawPath.moveTo(p.x, p.y);
     }
 
     private void addCurveToPoint(PointF p, PointF controlPoint1, PointF controlPoint2) {
-        mPath.cubicTo(controlPoint1.x, controlPoint1.y, controlPoint2.x, controlPoint2.y, p.x, p.y);
+        drawPath.cubicTo(controlPoint1.x, controlPoint1.y, controlPoint2.x, controlPoint2.y, p.x, p.y);
     }
 }

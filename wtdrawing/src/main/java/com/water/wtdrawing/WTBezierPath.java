@@ -14,7 +14,7 @@ public class WTBezierPath extends Path {
     protected int strokeColor;
 
     /**
-     * Path stroke width, each pathh can have it's own stroke width.
+     * Path stroke width, each path can have it's own stroke width.
      */
     protected float strokeWidth;
 
@@ -27,4 +27,5 @@ public class WTBezierPath extends Path {
      * Define if this path is a circle.
      */
     protected boolean isCircle;
+
 }

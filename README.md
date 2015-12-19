@@ -8,6 +8,7 @@ A simple way to draw smooth line on Android.
 * Undo
 * Clear all drawings
 * Eraser drawing
+* Get final bitmap
 
 ## Usage
 In Android Studio, just import module `wtdrawing`. In other IDE, you should copy `WTBezierPath.java` and `WTDrawingView.java` into your project.
@@ -39,20 +40,28 @@ wtDrawingView.clear();
 wtDrawingView.setEraserMode(true);
 ~~~
 ### Change stroke width
-Default stroke width is 2.0(dp).
-
 ~~~java
 wtDrawingView.setStrokeWidth(5.0f); // 5.0f is a dp value.
 ~~~
+Default stroke width is 2.0(dp).
 ### Change stroke color
-Default stroke color is black.
-
 ~~~java
 wtDrawingView.setStrokeColor(Color.RED);
 ~~~
+Default stroke color is black.
 ### Change eraser stroke width
-Default eraser width is 20(dp).
-
 ~~~java
 wtDrawingView.setEraserWidth(20.0f); // 20.0f is a dp value.
 ~~~
+Default eraser width is 20(dp).
+### Get bitmap
+~~~java
+int backgroundColor = Color.WHITE;
+Bitmap bitmap = wtDrawingView.getBitmap(backgroundColor);
+~~~
+
+### Changelog
+**1.0.1**
+
+* add getBitmap method to retrieve final bitmap
+* Use `dirty rect` to improve drawing performance
